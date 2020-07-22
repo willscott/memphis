@@ -1,6 +1,8 @@
 package memphis
 
 import (
+	"fmt"
+	"math/rand"
 	"os"
 	"path"
 	"strings"
@@ -28,7 +30,9 @@ func (b *Billy) Create(filename string) (billy.File, error) {
 		return nil, ErrExists
 	}
 
-	return nil, nil
+	f := treeRef.Create(name, b.euid, b.egid, 0666)
+
+	return &BillyFile{f, 0}, nil
 }
 
 // Open is a shortcut to openfile
@@ -81,12 +85,62 @@ func (b *Billy) Stat(filename string) (os.FileInfo, error) {
 
 // Rename a file
 func (b *Billy) Rename(oldpath, newpath string) error {
-	return nil
+	oldDir, oldName := path.Split(oldpath)
+	oldParent := b.root.WalkDir(strings.Split(oldDir, string(os.PathSeparator)))
+	if oldParent == nil {
+		return os.ErrNotExist
+	}
+
+	newDir, newName := path.Split(newpath)
+	newParent := b.root.WalkDir(strings.Split(newDir, string(os.PathSeparator)))
+	if newParent == nil {
+		return os.ErrNotExist
+	}
+	if _, ok := newParent.files[newName]; ok {
+		return os.ErrExist
+	}
+	if _, ok := newParent.directories[newName]; ok {
+		return os.ErrExist
+	}
+
+	// TODO: permissions check.
+
+	if f, ok := oldParent.files[oldName]; ok {
+		// move file.
+		newParent.files[newName] = f
+		delete(oldParent.files, oldName)
+		return nil
+	} else if d, ok := oldParent.directories[oldName]; ok {
+		// move dir.
+		newParent.directories[newName] = d
+		delete(oldParent.directories, newName)
+		return nil
+	}
+	return os.ErrNotExist
 }
 
 // Remove deletes a file
 func (b *Billy) Remove(filename string) error {
-	return nil
+	dir, name := path.Split(filename)
+	parent := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
+	if _, ok := parent.files[name]; ok {
+		// TODO: permissions.
+		delete(parent.files, name)
+		return nil
+	}
+
+	if d, ok := parent.directories[name]; ok {
+		// TODO: permissions.
+
+		// Directory must be empty
+		if len(d.files) > 0 || len(d.directories) > 0 {
+			return os.ErrExist
+		}
+		delete(parent.directories, name)
+		return nil
+	}
+
+	return os.ErrNotExist
 }
 
 // Join constructs a path
@@ -96,12 +150,29 @@ func (b *Billy) Join(elem ...string) string {
 
 // TempFile create an empty tempfile
 func (b *Billy) TempFile(dir, prefix string) (billy.File, error) {
-	return nil, nil
+	d := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
+	if d == nil {
+		return nil, os.ErrNotExist
+	}
+	r := rand.Int()
+	n := fmt.Sprintf("%s%d", prefix, r)
+	return b.Create(path.Join(dir, n))
 }
 
 // ReadDir lists directory contents
 func (b *Billy) ReadDir(path string) ([]os.FileInfo, error) {
-	return nil, nil
+	d := b.root.WalkDir(strings.Split(path, string(os.PathSeparator)))
+	if d == nil {
+		return nil, os.ErrNotExist
+	}
+	items := make([]os.FileInfo)
+	for _, dir := range d.directories {
+		items = append(items, &DirMeta{dir})
+	}
+	for _, file := range d.files {
+		items = append(items, file)
+	}
+	return items, nil
 }
 
 // MkdirAll creates a new directory
