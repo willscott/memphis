@@ -69,18 +69,27 @@ func (b *Billy) OpenFile(filename string, flag int, perm os.FileMode) (billy.Fil
 
 // Stat returns file metadata
 func (b *Billy) Stat(filename string) (os.FileInfo, error) {
+	return b.getFileInfo(filename, true)
+}
+
+func (b *Billy) getFileInfo(filename string, followLinks bool) (os.FileInfo, error) {
 	dir, name := path.Split(filename)
 	parent := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
 	if parent == nil {
 		return nil, os.ErrNotExist
 	}
 	if f, ok := parent.files[name]; ok {
+		if ((f.Mode() & os.ModeSymlink) != 0) && followLinks {
+			// todo: maybe resolve circular links?
+			return b.getFileInfo(string(f.Bytes()), true)
+		}
 		return f, nil
 	}
 	if d, ok := parent.directories[name]; ok {
-		return &DirMeta{name, &d}, nil
+		return &DirMeta{name, d}, nil
 	}
 	return nil, os.ErrNotExist
+
 }
 
 // Rename a file
@@ -165,9 +174,9 @@ func (b *Billy) ReadDir(path string) ([]os.FileInfo, error) {
 	if d == nil {
 		return nil, os.ErrNotExist
 	}
-	items := make([]os.FileInfo)
-	for _, dir := range d.directories {
-		items = append(items, &DirMeta{dir})
+	items := make([]os.FileInfo, 0, len(d.directories)+len(d.files))
+	for name, dir := range d.directories {
+		items = append(items, &DirMeta{name, dir})
 	}
 	for _, file := range d.files {
 		items = append(items, file)
@@ -177,12 +186,22 @@ func (b *Billy) ReadDir(path string) ([]os.FileInfo, error) {
 
 // MkdirAll creates a new directory
 func (b *Billy) MkdirAll(filename string, perm os.FileMode) error {
+	parts := strings.Split(filename, string(os.PathSeparator))
+	cur := b.root
+	for _, p := range parts {
+		// todo: permissions
+		if next, ok := cur.directories[p]; ok {
+			cur = next
+		} else {
+			cur = cur.CreateDir(p, b.euid, b.egid, perm.Perm()|os.ModeDir)
+		}
+	}
 	return nil
 }
 
 // Lstat provides symlink info
 func (b *Billy) Lstat(filename string) (os.FileInfo, error) {
-	return nil, nil
+	return b.getFileInfo(filename, false)
 }
 
 // Symlink creates a symbolic link
@@ -192,7 +211,12 @@ func (b *Billy) Symlink(target, link string) error {
 
 // Readlink returns symlink contents
 func (b *Billy) Readlink(link string) (string, error) {
-	return "", nil
+	f, err := b.getFileInfo(link, false)
+	if err != nil {
+		return "", err
+	}
+	//todo: validate read permission.
+	return string(f.(*File).Bytes()), nil
 }
 
 // Chmod changes file permissions

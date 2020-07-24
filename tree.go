@@ -12,7 +12,7 @@ type Tree struct {
 	uid         uint32
 	gid         uint32
 	mode        os.FileMode
-	directories map[string]Tree
+	directories map[string]*Tree
 	files       map[string]*File
 	createTime  time.Time
 	modTime     time.Time
@@ -32,6 +32,20 @@ func (t *Tree) Create(name string, euid, egid uint32, perm os.FileMode) *File {
 	return t.files[name]
 }
 
+// CreateDir makes a new directory in the directory
+func (t *Tree) CreateDir(name string, euid, egid uint32, perm os.FileMode) *Tree {
+	t.directories[name] = &Tree{
+		uid:         euid,
+		gid:         egid,
+		mode:        perm,
+		directories: make(map[string]*Tree),
+		files:       make(map[string]*File),
+		createTime:  time.Now(),
+		modTime:     time.Now(),
+	}
+	return t.directories[name]
+}
+
 // WalkDir descends to a given sub directory
 func (t *Tree) WalkDir(p []string) *Tree {
 	next := p[0]
@@ -40,7 +54,7 @@ func (t *Tree) WalkDir(p []string) *Tree {
 		return nil
 	}
 	if len(p) == 1 {
-		return &n
+		return n
 	}
 	return n.WalkDir(p[1:])
 }
