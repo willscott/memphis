@@ -72,6 +72,11 @@ func (b *Billy) Stat(filename string) (os.FileInfo, error) {
 	return b.getFileInfo(filename, true)
 }
 
+// Lstat provides symlink info
+func (b *Billy) Lstat(filename string) (os.FileInfo, error) {
+	return b.getFileInfo(filename, false)
+}
+
 func (b *Billy) getFileInfo(filename string, followLinks bool) (os.FileInfo, error) {
 	dir, name := path.Split(filename)
 	parent := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
@@ -199,13 +204,15 @@ func (b *Billy) MkdirAll(filename string, perm os.FileMode) error {
 	return nil
 }
 
-// Lstat provides symlink info
-func (b *Billy) Lstat(filename string) (os.FileInfo, error) {
-	return b.getFileInfo(filename, false)
-}
-
 // Symlink creates a symbolic link
 func (b *Billy) Symlink(target, link string) error {
+	f, err := b.Create(link)
+	if err != nil {
+		return err
+	}
+	bf := f.(*BillyFile)
+	bf.Write([]byte(target))
+	bf.File.mode |= os.ModeSymlink
 	return nil
 }
 
@@ -216,26 +223,84 @@ func (b *Billy) Readlink(link string) (string, error) {
 		return "", err
 	}
 	//todo: validate read permission.
-	return string(f.(*File).Bytes()), nil
+	ffile, ok := f.(*File)
+	if !ok {
+		return "", os.ErrExist
+	}
+	return string(ffile.Bytes()), nil
 }
 
 // Chmod changes file permissions
 func (b *Billy) Chmod(name string, mode os.FileMode) error {
+	f, err := b.getFileInfo(name, true)
+	if err != nil {
+		return err
+	}
+	ffile, ok := f.(*File)
+	if !ok {
+		fdir, ok := f.(*DirMeta)
+		if !ok {
+			return os.ErrInvalid
+		}
+		fdir.Tree.mode = mode
+		return nil
+	}
+	ffile.mode = mode
 	return nil
 }
 
 // Lchown changes symlink ownership
 func (b *Billy) Lchown(name string, uid, gid int) error {
-	return nil
+	return b.changeOwnership(name, uid, gid, false)
 }
 
 // Chown chagnes file ownership
 func (b *Billy) Chown(name string, uid, gid int) error {
+	return b.changeOwnership(name, uid, gid, true)
+}
+
+func (b *Billy) changeOwnership(name string, uid, gid int, followLinks bool) error {
+	if b.euid != 0 && b.egid != 0 {
+		return os.ErrPermission
+	}
+
+	f, err := b.getFileInfo(name, followLinks)
+	if err != nil {
+		return err
+	}
+	ffile, ok := f.(*File)
+	if !ok {
+		fdir, ok := f.(*DirMeta)
+		if !ok {
+			return os.ErrInvalid
+		}
+		fdir.Tree.uid = uint32(uid)
+		fdir.Tree.gid = uint32(gid)
+		return nil
+	}
+	ffile.uid = uint32(uid)
+	ffile.gid = uint32(gid)
+
 	return nil
 }
 
 // Chtimes changes file access time
 func (b *Billy) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	f, err := b.getFileInfo(name, true)
+	if err != nil {
+		return err
+	}
+	ffile, ok := f.(*File)
+	if !ok {
+		fdir, ok := f.(*DirMeta)
+		if !ok {
+			return os.ErrInvalid
+		}
+		fdir.Tree.modTime = mtime
+		return nil
+	}
+	ffile.modTime = mtime
+
 	return nil
 }
 
