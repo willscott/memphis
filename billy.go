@@ -90,7 +90,7 @@ func (b *Billy) getFileInfo(filename string, followLinks bool) (os.FileInfo, err
 		}
 		return f, nil
 	}
-	if d, ok := parent.directories[name]; ok {
+	if d := parent.WalkDir([]string{name}); d != nil {
 		return &DirMeta{name, d}, nil
 	}
 	return nil, os.ErrNotExist
@@ -143,7 +143,7 @@ func (b *Billy) Remove(filename string) error {
 		return nil
 	}
 
-	if d, ok := parent.directories[name]; ok {
+	if d := parent.WalkDir([]string{name}); d != nil {
 		// TODO: permissions.
 
 		// Directory must be empty
@@ -180,7 +180,8 @@ func (b *Billy) ReadDir(path string) ([]os.FileInfo, error) {
 		return nil, os.ErrNotExist
 	}
 	items := make([]os.FileInfo, 0, len(d.directories)+len(d.files))
-	for name, dir := range d.directories {
+	for name := range d.directories {
+		dir := d.WalkDir([]string{name})
 		items = append(items, &DirMeta{name, dir})
 	}
 	for _, file := range d.files {
@@ -195,7 +196,7 @@ func (b *Billy) MkdirAll(filename string, perm os.FileMode) error {
 	cur := b.root
 	for _, p := range parts {
 		// todo: permissions
-		if next, ok := cur.directories[p]; ok {
+		if next := cur.WalkDir([]string{p}); next != nil {
 			cur = next
 		} else {
 			cur = cur.CreateDir(p, b.euid, b.egid, perm.Perm()|os.ModeDir)

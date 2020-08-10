@@ -3,7 +3,15 @@ package memphis
 import (
 	"io"
 	"os"
+	"sync"
 )
+
+// FileContent represents the actual data of a file.
+type FileContent interface {
+	Size() int64
+	io.ReaderAt
+	io.WriterAt
+}
 
 // TruncatableContents is an optional FileContent interface for efficiency
 type TruncatableContents interface {
@@ -95,4 +103,45 @@ func MemBufferFrom(fc FileContent) FileContent {
 		}
 	}
 	return &memoryContents{d}
+}
+
+// copyOnWrite represents a FileContent that should on the first 'write' be copied via 'MemBufferFrom'
+type copyOnWrite struct {
+	FileContent
+	sync.Once
+}
+
+func (c *copyOnWrite) WriteAt(p []byte, offset int64) (int, error) {
+	c.Do(func() {
+		c.FileContent = MemBufferFrom(c.FileContent)
+	})
+	return c.WriteAt(p, offset)
+}
+
+// osFileContent is a File Content backed by an on-disk file.
+type osFileContent struct {
+	path string
+	size int64
+}
+
+func (o *osFileContent) Size() int64 {
+	return o.size
+}
+
+func (o *osFileContent) ReadAt(buf []byte, offset int64) (n int, err error) {
+	fp, err := os.Open(o.path)
+	if err != nil {
+		return 0, err
+	}
+	defer fp.Close()
+	return fp.ReadAt(buf, offset)
+}
+
+func (o *osFileContent) WriteAt(p []byte, offset int64) (int, error) {
+	fp, err := os.Open(o.path)
+	if err != nil {
+		return 0, err
+	}
+	defer fp.Close()
+	return fp.WriteAt(p, offset)
 }

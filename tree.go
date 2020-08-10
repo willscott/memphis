@@ -1,14 +1,16 @@
 package memphis
 
 import (
-	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Tree represents a directory
 type Tree struct {
+	ready       sync.Once
+	deferred    func()
 	uid         uint32
 	gid         uint32
 	mode        os.FileMode
@@ -20,6 +22,7 @@ type Tree struct {
 
 // Create makes a new file in the directory
 func (t *Tree) Create(name string, euid, egid uint32, perm os.FileMode) *File {
+	t.ready.Do(t.deferred)
 	t.files[name] = &File{
 		name:       name,
 		mode:       perm,
@@ -32,9 +35,12 @@ func (t *Tree) Create(name string, euid, egid uint32, perm os.FileMode) *File {
 	return t.files[name]
 }
 
+func noOp() {}
+
 // CreateDir makes a new directory in the directory
 func (t *Tree) CreateDir(name string, euid, egid uint32, perm os.FileMode) *Tree {
 	t.directories[name] = &Tree{
+		deferred:    noOp,
 		uid:         euid,
 		gid:         egid,
 		mode:        perm,
@@ -48,12 +54,14 @@ func (t *Tree) CreateDir(name string, euid, egid uint32, perm os.FileMode) *Tree
 
 // WalkDir descends to a given sub directory
 func (t *Tree) WalkDir(p []string) *Tree {
+	t.ready.Do(t.deferred)
 	next := p[0]
 	n, ok := t.directories[next]
 	if !ok {
 		return nil
 	}
 	if len(p) == 1 {
+		n.ready.Do(n.deferred)
 		return n
 	}
 	return n.WalkDir(p[1:])
@@ -61,6 +69,7 @@ func (t *Tree) WalkDir(p []string) *Tree {
 
 // Get attempts to get a file at a given path.
 func (t *Tree) Get(p []string) (*File, error) {
+	t.ready.Do(t.deferred)
 	if len(p) == 0 {
 		return nil, os.ErrNotExist
 	}
@@ -121,76 +130,4 @@ func (d *DirMeta) IsDir() bool {
 // Sys provides os.FileInfo trapdoor down to undefined behavior
 func (d *DirMeta) Sys() interface{} {
 	return nil
-}
-
-// File holds the metadata of a FS object
-type File struct {
-	name       string
-	mode       os.FileMode
-	uid        uint32
-	gid        uint32
-	createTime time.Time
-	modTime    time.Time
-	contents   FileContent
-}
-
-// Name returns the file name
-func (f *File) Name() string {
-	return f.name
-}
-
-// Size returns the file's size
-func (f *File) Size() int64 {
-	return f.contents.Size()
-}
-
-// Mode returns the file's mode
-func (f *File) Mode() os.FileMode {
-	return f.mode
-}
-
-// ModTime returns when the file was modified
-func (f *File) ModTime() time.Time {
-	return f.ModTime()
-}
-
-// IsDir returns if the file is a directory (no)
-func (f *File) IsDir() bool {
-	return false
-}
-
-// Sys is a wildcard in the OS interface
-func (f *File) Sys() interface{} {
-	return nil
-}
-
-// Bytes returns a direct buffer of the contents of the file
-func (f *File) Bytes() []byte {
-	if f.contents == nil {
-		return []byte{}
-	}
-	n := int64(0)
-	l := f.contents.Size()
-	buf := make([]byte, l)
-	for n < l {
-		a, e := f.contents.ReadAt(buf[n:], n)
-		n += int64(a)
-		if n == l || e == io.EOF {
-			return buf
-		}
-		if e != nil {
-			return []byte{}
-		}
-		if a == 0 {
-			return []byte{}
-		}
-	}
-	return buf
-}
-
-// FileContent represents the actual data of a file.
-type FileContent interface {
-	Size() int64
-	io.ReaderAt
-	io.WriterAt
 }
