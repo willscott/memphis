@@ -47,7 +47,7 @@ func (bf *BillyFile) Close() error {
 	return nil
 }
 
-// ReadAt is as passthrough.
+// ReadAt is a passthrough.
 func (bf *BillyFile) ReadAt(buf []byte, offset int64) (n int, err error) {
 	return bf.contents.ReadAt(buf, offset)
 }
@@ -64,6 +64,11 @@ func (bf *BillyFile) Write(buf []byte) (n int, err error) {
 	n, err = bf.contents.WriteAt(buf, bf.position)
 	bf.position += int64(n)
 	return
+}
+
+// WriteAt is a passthrough.
+func (bf *BillyFile) WriteAt(buf []byte, offset int64) (n int, err error) {
+	return bf.contents.WriteAt(buf, offset)
 }
 
 // Seek changes file position

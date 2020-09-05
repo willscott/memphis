@@ -13,9 +13,18 @@ import (
 
 // Billy wraps a filesystem subtree in the billy filesystem interface
 type Billy struct {
-	euid uint32
-	egid uint32
+	euid uint32 // euid is the effective user ID that the billy view will assume
+	egid uint32 // egid is the effective group ID that the billy view will assume
 	root *Tree
+}
+
+// AsBillyFS provides a billy-comptatible view of the current memphis directory tree
+func (t *Tree) AsBillyFS(euid, egid uint32) *Billy {
+	return &Billy{
+		euid,
+		egid,
+		t,
+	}
 }
 
 // Create makes a new empty file

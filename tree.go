@@ -55,6 +55,9 @@ func (t *Tree) CreateDir(name string, euid, egid uint32, perm os.FileMode) *Tree
 // WalkDir descends to a given sub directory
 func (t *Tree) WalkDir(p []string) *Tree {
 	t.ready.Do(t.deferred)
+	for p[0] == "." {
+		p = p[1:]
+	}
 	next := p[0]
 	n, ok := t.directories[next]
 	if !ok {
