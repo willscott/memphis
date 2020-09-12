@@ -5,14 +5,13 @@ const Separator = "/"
 
 // New creates a new, empty memphis instance
 func New() *Tree {
-	fs := Tree{}
-	return &fs
+	return newTree(0, 0, 0777)
 }
 
 // FromOS creates a memphis instance overlayed on an OS subtree
 func FromOS(osPath string) *Tree {
-	fs := Tree{}
-	fs.deferred = deferredOSDir(&fs, osPath)
+	fs := newTree(0, 0, 0777)
+	fs.deferred = deferredOSDir(fs, osPath)
 	fs.ready.Do(fs.deferred)
-	return &fs
+	return fs
 }

@@ -20,6 +20,19 @@ type Tree struct {
 	modTime     time.Time
 }
 
+func newTree(euid, egid uint32, perm os.FileMode) *Tree {
+	return &Tree{
+		deferred:    noOp,
+		uid:         euid,
+		gid:         egid,
+		mode:        perm,
+		directories: make(map[string]*Tree),
+		files:       make(map[string]*File),
+		createTime:  time.Now(),
+		modTime:     time.Now(),
+	}
+}
+
 // Create makes a new file in the directory
 func (t *Tree) Create(name string, euid, egid uint32, perm os.FileMode) *File {
 	t.ready.Do(t.deferred)
@@ -39,16 +52,8 @@ func noOp() {}
 
 // CreateDir makes a new directory in the directory
 func (t *Tree) CreateDir(name string, euid, egid uint32, perm os.FileMode) *Tree {
-	t.directories[name] = &Tree{
-		deferred:    noOp,
-		uid:         euid,
-		gid:         egid,
-		mode:        perm,
-		directories: make(map[string]*Tree),
-		files:       make(map[string]*File),
-		createTime:  time.Now(),
-		modTime:     time.Now(),
-	}
+	t.ready.Do(t.deferred)
+	t.directories[name] = newTree(euid, egid, perm)
 	return t.directories[name]
 }
 
@@ -116,6 +121,7 @@ func (t *Tree) Get(p []string, followSymlinks bool) (*File, *Tree, error) {
 	}
 
 	if d, ok := base.directories[fname]; ok {
+		d.ready.Do(d.deferred)
 		return nil, d, nil
 	}
 

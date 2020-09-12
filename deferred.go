@@ -38,8 +38,9 @@ func deferredOSDir(dir *Tree, dirPath string) func() {
 
 		for _, f := range files {
 			if f.IsDir() {
-				child := dir.CreateDir(f.Name(), dir.uid, dir.gid, dir.mode)
+				child := newTree(dir.uid, dir.gid, dir.mode)
 				child.deferred = deferredOSDir(child, path.Join(dirPath, f.Name()))
+				dir.directories[f.Name()] = child
 			} else {
 				dir.files[f.Name()] = FileFromOS(path.Join(dirPath, f.Name()), dir.uid, dir.gid, f)
 			}

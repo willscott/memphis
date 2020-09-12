@@ -34,7 +34,7 @@ func (f *File) Mode() os.FileMode {
 
 // ModTime returns when the file was modified
 func (f *File) ModTime() time.Time {
-	return f.ModTime()
+	return f.modTime
 }
 
 // IsDir returns if the file is a directory (no)
