@@ -5,12 +5,7 @@ import (
 	"os"
 	"path"
 	"syscall"
-	"time"
 )
-
-func timespecToTime(ts syscall.Timespec) time.Time {
-	return time.Unix(int64(ts.Sec), int64(ts.Nsec))
-}
 
 func deferredOSDir(dir *Tree, dirPath string) func() {
 	return func() {
@@ -25,8 +20,7 @@ func deferredOSDir(dir *Tree, dirPath string) func() {
 		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
 			dir.uid = stat.Uid
 			dir.gid = stat.Gid
-			// TODO: sadly, the name of this field is inconsistent. likely needs deferral to per-goos impls
-			dir.createTime = timespecToTime(stat.Ctimespec)
+			dir.createTime = createTime(stat)
 		}
 
 		dir.mode = info.Mode()
@@ -63,8 +57,7 @@ func FileFromOS(path string, uid, gid uint32, info os.FileInfo) *File {
 	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
 		f.uid = stat.Uid
 		f.gid = stat.Gid
-		// TODO: sadly, the name of this field is inconsistent. likely needs deferral to per-goos impls
-		f.createTime = timespecToTime(stat.Ctimespec)
+		f.createTime = createTime(stat)
 	}
 
 	f.contents = &copyOnWrite{FileContent: &osFileContent{path: path, size: info.Size()}}
