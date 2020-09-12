@@ -1,5 +1,8 @@
 package memphis
 
+// Separator provides a stable path separator the memphis FS expects.
+const Separator = "/"
+
 // New creates a new, empty memphis instance
 func New() *Tree {
 	fs := Tree{}

@@ -55,26 +55,56 @@ func (t *Tree) CreateDir(name string, euid, egid uint32, perm os.FileMode) *Tree
 // WalkDir descends to a given sub directory
 func (t *Tree) WalkDir(p []string) *Tree {
 	t.ready.Do(t.deferred)
-	for p[0] == "." {
-		p = p[1:]
-	}
-	next := p[0]
-	n, ok := t.directories[next]
-	if !ok {
+
+	node := t
+	path := []string{}
+
+	remaining := p
+	for len(remaining) > 0 {
+		part := remaining[0]
+		remaining = remaining[1:]
+		if part == "." || part == "" {
+			continue
+		}
+		if part == ".." {
+			if len(path) > 0 {
+				path = path[:len(path)-1]
+				// TODO: circular symlinks will infiniloop
+				node = t.WalkDir(path)
+				continue
+			} else {
+				return nil //directory traversal
+			}
+		}
+		n, ok := node.directories[part]
+		if ok {
+			node = n
+			n.ready.Do(n.deferred)
+			path = append(path, part)
+			continue
+		}
+		f, ok := node.files[part]
+		if ok && f.Mode()&os.ModeSymlink != 0 {
+			target := strings.Split(string(f.Bytes()), Separator)
+			if target[0] == "" {
+				target = target[1:]
+				path = []string{}
+				node = t
+			}
+			remaining = append(target, remaining...)
+			continue
+		}
+
 		return nil
 	}
-	if len(p) == 1 {
-		n.ready.Do(n.deferred)
-		return n
-	}
-	return n.WalkDir(p[1:])
+	return node
 }
 
 // Get attempts to get a file at a given path.
-func (t *Tree) Get(p []string) (*File, error) {
+func (t *Tree) Get(p []string, followSymlinks bool) (*File, *Tree, error) {
 	t.ready.Do(t.deferred)
 	if len(p) == 0 {
-		return nil, os.ErrNotExist
+		return nil, nil, os.ErrNotExist
 	}
 	fname := p[len(p)-1]
 	base := t
@@ -82,21 +112,29 @@ func (t *Tree) Get(p []string) (*File, error) {
 		base = t.WalkDir(p[:len(p)-1])
 	}
 	if base == nil {
-		return nil, os.ErrNotExist
+		return nil, nil, os.ErrNotExist
 	}
+
+	if d, ok := base.directories[fname]; ok {
+		return nil, d, nil
+	}
+
 	f, ok := base.files[fname]
 	if !ok {
-		return nil, os.ErrNotExist
+		return nil, nil, os.ErrNotExist
 	}
 	// Check permissions
 	// TODO
 
 	// Resolve symlinks
-	if (f.Mode() & os.ModeSymlink) != 0 {
-		target := strings.Split(string(f.Bytes()), string(os.PathSeparator))
-		return t.Get(target)
+	if followSymlinks && ((f.Mode() & os.ModeSymlink) != 0) {
+		target := strings.Split(string(f.Bytes()), Separator)
+		if target[0] == "" {
+			return t.Get(target[1:], true)
+		}
+		return t.Get(append(p[0:len(p)-1], target...), true)
 	}
-	return f, nil
+	return f, nil, nil
 }
 
 // DirMeta is a struct of metadata about a directory

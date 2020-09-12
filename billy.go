@@ -30,7 +30,7 @@ func (t *Tree) AsBillyFS(euid, egid uint32) *Billy {
 // Create makes a new empty file
 func (b *Billy) Create(filename string) (billy.File, error) {
 	dir, name := path.Split(filename)
-	treeRef := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
+	treeRef := b.root.WalkDir(strings.Split(dir, Separator))
 	if treeRef == nil {
 		return nil, ErrNotDir
 	}
@@ -52,7 +52,7 @@ func (b *Billy) Open(filename string) (billy.File, error) {
 // OpenFile opens a file for access
 func (b *Billy) OpenFile(filename string, flag int, perm os.FileMode) (billy.File, error) {
 	dir, name := path.Split(filename)
-	parent := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
+	parent := b.root.WalkDir(strings.Split(dir, Separator))
 	if parent == nil {
 		return nil, os.ErrNotExist
 	}
@@ -68,9 +68,12 @@ func (b *Billy) OpenFile(filename string, flag int, perm os.FileMode) (billy.Fil
 		return b.Create(filename)
 	}
 
-	f, err := b.root.Get(strings.Split(filename, string(os.PathSeparator)))
+	f, d, err := b.root.Get(strings.Split(filename, Separator), true)
 	if err != nil {
 		return nil, err
+	}
+	if d != nil {
+		return nil, os.ErrExist
 	}
 
 	return &BillyFile{f, 0}, nil
@@ -88,7 +91,7 @@ func (b *Billy) Lstat(filename string) (os.FileInfo, error) {
 
 func (b *Billy) getFileInfo(filename string, followLinks bool) (os.FileInfo, error) {
 	dir, name := path.Split(filename)
-	parent := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
+	parent := b.root.WalkDir(strings.Split(dir, Separator))
 	if parent == nil {
 		return nil, os.ErrNotExist
 	}
@@ -109,13 +112,13 @@ func (b *Billy) getFileInfo(filename string, followLinks bool) (os.FileInfo, err
 // Rename a file
 func (b *Billy) Rename(oldpath, newpath string) error {
 	oldDir, oldName := path.Split(oldpath)
-	oldParent := b.root.WalkDir(strings.Split(oldDir, string(os.PathSeparator)))
+	oldParent := b.root.WalkDir(strings.Split(oldDir, Separator))
 	if oldParent == nil {
 		return os.ErrNotExist
 	}
 
 	newDir, newName := path.Split(newpath)
-	newParent := b.root.WalkDir(strings.Split(newDir, string(os.PathSeparator)))
+	newParent := b.root.WalkDir(strings.Split(newDir, Separator))
 	if newParent == nil {
 		return os.ErrNotExist
 	}
@@ -145,7 +148,7 @@ func (b *Billy) Rename(oldpath, newpath string) error {
 // Remove deletes a file
 func (b *Billy) Remove(filename string) error {
 	dir, name := path.Split(filename)
-	parent := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
+	parent := b.root.WalkDir(strings.Split(dir, Separator))
 	if _, ok := parent.files[name]; ok {
 		// TODO: permissions.
 		delete(parent.files, name)
@@ -173,7 +176,7 @@ func (b *Billy) Join(elem ...string) string {
 
 // TempFile create an empty tempfile
 func (b *Billy) TempFile(dir, prefix string) (billy.File, error) {
-	d := b.root.WalkDir(strings.Split(dir, string(os.PathSeparator)))
+	d := b.root.WalkDir(strings.Split(dir, Separator))
 	if d == nil {
 		return nil, os.ErrNotExist
 	}
@@ -184,7 +187,7 @@ func (b *Billy) TempFile(dir, prefix string) (billy.File, error) {
 
 // ReadDir lists directory contents
 func (b *Billy) ReadDir(path string) ([]os.FileInfo, error) {
-	d := b.root.WalkDir(strings.Split(path, string(os.PathSeparator)))
+	d := b.root.WalkDir(strings.Split(path, Separator))
 	if d == nil {
 		return nil, os.ErrNotExist
 	}
@@ -201,7 +204,7 @@ func (b *Billy) ReadDir(path string) ([]os.FileInfo, error) {
 
 // MkdirAll creates a new directory
 func (b *Billy) MkdirAll(filename string, perm os.FileMode) error {
-	parts := strings.Split(filename, string(os.PathSeparator))
+	parts := strings.Split(filename, Separator)
 	cur := b.root
 	for _, p := range parts {
 		// todo: permissions
@@ -264,7 +267,7 @@ func (b *Billy) Lchown(name string, uid, gid int) error {
 	return b.changeOwnership(name, uid, gid, false)
 }
 
-// Chown chagnes file ownership
+// Chown changes file ownership
 func (b *Billy) Chown(name string, uid, gid int) error {
 	return b.changeOwnership(name, uid, gid, true)
 }
@@ -316,7 +319,7 @@ func (b *Billy) Chtimes(name string, atime time.Time, mtime time.Time) error {
 
 // Chroot returns a subtree of the filesystem
 func (b *Billy) Chroot(path string) (billy.Filesystem, error) {
-	dir := b.root.WalkDir(strings.Split(path, string(os.PathSeparator)))
+	dir := b.root.WalkDir(strings.Split(path, Separator))
 	if dir == nil {
 		return nil, os.ErrNotExist
 	}
@@ -325,7 +328,7 @@ func (b *Billy) Chroot(path string) (billy.Filesystem, error) {
 
 // Root prints the path of the current fs root
 func (b *Billy) Root() string {
-	return string(os.PathSeparator)
+	return Separator
 }
 
 // Capabilities tells billy what this FS can do
