@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"go.polydawn.net/rio/fs"
+	"github.com/polydawn/rio/fs"
 )
 
 // Placer conforms a memphis directory tree to the rio FS interface
