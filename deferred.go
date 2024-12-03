@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"syscall"
 )
 
 func deferredOSDir(dir *Tree, dirPath string) func() {
@@ -17,11 +16,7 @@ func deferredOSDir(dir *Tree, dirPath string) func() {
 		dir.createTime = dir.modTime
 
 		// hacky retreaval of uid/guid from os
-		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-			dir.uid = stat.Uid
-			dir.gid = stat.Gid
-			dir.createTime = createTime(stat)
-		}
+		osStat(dir, info.Sys())
 
 		dir.mode = info.Mode()
 
@@ -54,11 +49,7 @@ func FileFromOS(path string, uid, gid uint32, info os.FileInfo) *File {
 		modTime:    info.ModTime(),
 	}
 
-	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-		f.uid = stat.Uid
-		f.gid = stat.Gid
-		f.createTime = createTime(stat)
-	}
+	osStatFile(&f, info.Sys())
 
 	f.contents = &copyOnWrite{FileContent: &osFileContent{path: path, size: info.Size()}}
 	return &f

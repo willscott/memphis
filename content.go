@@ -115,7 +115,7 @@ func (c *copyOnWrite) WriteAt(p []byte, offset int64) (int, error) {
 	c.Do(func() {
 		c.FileContent = MemBufferFrom(c.FileContent)
 	})
-	return c.WriteAt(p, offset)
+	return c.FileContent.WriteAt(p, offset)
 }
 
 // osFileContent is a File Content backed by an on-disk file.
