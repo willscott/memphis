@@ -1,9 +1,9 @@
 module github.com/willscott/memphis
 
-go 1.20
+go 1.25.0
 
 require (
-	github.com/go-git/go-billy/v5 v5.0.0
+	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/polydawn/rio v0.0.0-20201122020833-6192319df581
 )
 
